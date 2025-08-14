@@ -13,6 +13,9 @@ export interface TimeEntry {
   checkOut?: string
   date: string
   hoursWorked?: number
+  isAutoClose?: boolean // True if checkout was done automatically
+  isManualEntry?: boolean // True if entry was added manually by admin
+  notes?: string // Additional notes for the entry
 }
 
 export interface WorkSession {

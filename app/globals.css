@@ -123,3 +123,60 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Added responsive design utilities and smooth scrolling */
+@layer utilities {
+  .responsive-grid {
+    @apply grid gap-4;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .responsive-table {
+    @apply overflow-x-auto;
+  }
+
+  .responsive-table table {
+    @apply min-w-full;
+  }
+
+  .smooth-scroll {
+    scroll-behavior: smooth;
+  }
+
+  /* Mobile-first responsive breakpoints */
+  @media (max-width: 640px) {
+    .mobile-stack {
+      @apply flex-col space-y-2 space-x-0;
+    }
+
+    .mobile-full {
+      @apply w-full;
+    }
+
+    .mobile-text-sm {
+      @apply text-sm;
+    }
+  }
+
+  /* Tablet responsive adjustments */
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .tablet-grid-2 {
+      @apply grid-cols-2;
+    }
+
+    .tablet-grid-3 {
+      @apply grid-cols-3;
+    }
+  }
+
+  /* Desktop responsive enhancements */
+  @media (min-width: 1025px) {
+    .desktop-grid-4 {
+      @apply grid-cols-4;
+    }
+
+    .desktop-grid-5 {
+      @apply grid-cols-5;
+    }
+  }
+}

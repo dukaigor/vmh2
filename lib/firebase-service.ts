@@ -45,9 +45,24 @@ export class FirebaseService {
     await remove(workerRef)
   }
 
+  private static getMilanTime(): Date {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Rome" }))
+  }
+
+  private static formatMilanTime(date: Date): string {
+    return date.toLocaleTimeString("it-IT", {
+      hour12: false,
+      timeZone: "Europe/Rome",
+    })
+  }
+
+  private static formatMilanDate(date: Date): string {
+    return date.toLocaleDateString("en-CA", { timeZone: "Europe/Rome" })
+  }
+
   // Check if worker already has entry for today
   static async hasEntryToday(workerId: string): Promise<boolean> {
-    const today = new Date().toISOString().split("T")[0]
+    const today = this.formatMilanDate(this.getMilanTime())
     const entriesRef = ref(database, "timeEntries")
     const snapshot = await get(entriesRef)
 
@@ -69,9 +84,9 @@ export class FirebaseService {
       return { success: false, message: "Il lavoratore ha già un'entrata oggi" }
     }
 
-    const now = new Date()
-    const dateStr = now.toISOString().split("T")[0]
-    const timeStr = now.toLocaleTimeString("it-IT", { hour12: false })
+    const now = this.getMilanTime()
+    const dateStr = this.formatMilanDate(now)
+    const timeStr = this.formatMilanTime(now)
 
     const sessionRef = ref(database, `activeSessions/${worker.id}`)
     await set(sessionRef, {
@@ -91,10 +106,10 @@ export class FirebaseService {
 
     if (snapshot.exists()) {
       const session = snapshot.val()
-      const now = new Date()
-      const checkOutTime = now.toLocaleTimeString("it-IT", { hour12: false })
+      const now = this.getMilanTime()
+      const checkOutTime = this.formatMilanTime(now)
 
-      // Calculate hours worked
+      // Calculate hours worked using Milan timezone
       const checkInTime = new Date(`${session.date}T${session.checkIn}`)
       const checkOutDateTime = new Date(`${session.date}T${checkOutTime}`)
       const hoursWorked = (checkOutDateTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
@@ -109,6 +124,8 @@ export class FirebaseService {
         checkOut: checkOutTime,
         date: session.date,
         hoursWorked: Math.round(hoursWorked * 100) / 100,
+        isAutoClose: false,
+        isManualEntry: false,
       })
 
       // Remove from active sessions
@@ -155,7 +172,8 @@ export class FirebaseService {
       checkOut,
       date,
       hoursWorked: Math.round(hoursWorked * 100) / 100,
-      manualEntry: true,
+      isAutoClose: false,
+      isManualEntry: true,
     })
 
     return { success: true, message: "Entrata manuale aggiunta con successo" }
@@ -187,7 +205,7 @@ export class FirebaseService {
         checkOut,
         date,
         hoursWorked: Math.round(hoursWorked * 100) / 100,
-        modified: true,
+        notes: "Modificato dall'admin",
       })
       return { success: true, message: "Entrata modificata con successo" }
     }
@@ -310,9 +328,9 @@ export class FirebaseService {
     }
 
     const sessionsData = snapshot.val()
-    const today = new Date().toISOString().split("T")[0]
-    const now = new Date()
-    const currentTime = now.toLocaleTimeString("it-IT", { hour12: false }).substring(0, 5)
+    const today = this.formatMilanDate(this.getMilanTime())
+    const now = this.getMilanTime()
+    const currentTime = this.formatMilanTime(now).substring(0, 5)
 
     let closedCount = 0
 
@@ -352,8 +370,9 @@ export class FirebaseService {
           checkOut: actualCloseTime,
           date: session.date,
           hoursWorked: Math.max(0, Math.round(hoursWorked * 100) / 100),
-          autoClose: true,
-          autoCloseTime: closeTime,
+          isAutoClose: true,
+          isManualEntry: false,
+          notes: `Chiusura automatica alle ${closeTime}`,
         })
 
         // Remove from active sessions
@@ -382,8 +401,8 @@ export class FirebaseService {
     }
 
     const sessionsData = snapshot.val()
-    const now = new Date()
-    const actualCloseTime = closeTime || now.toLocaleTimeString("it-IT", { hour12: false })
+    const now = this.getMilanTime()
+    const actualCloseTime = closeTime || this.formatMilanTime(now)
     let closedCount = 0
 
     for (const sessionId of Object.keys(sessionsData)) {
@@ -409,7 +428,9 @@ export class FirebaseService {
         checkOut: actualCloseTime,
         date: session.date,
         hoursWorked: Math.max(0, Math.round(hoursWorked * 100) / 100),
-        manualClose: true,
+        isAutoClose: false,
+        isManualEntry: false,
+        notes: "Chiusura forzata dall'admin",
       })
 
       // Remove from active sessions

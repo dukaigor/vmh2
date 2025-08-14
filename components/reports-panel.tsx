@@ -92,7 +92,7 @@ export function ReportsPanel() {
   }
 
   const exportToCSV = () => {
-    const headers = ["Data", "Lavoratore", "Entrata", "Uscita", "Ore Lavorate"]
+    const headers = ["Data", "Lavoratore", "Entrata", "Uscita", "Ore Lavorate", "Note"]
     const csvContent = [
       headers.join(","),
       ...timeEntries.map((entry) =>
@@ -102,6 +102,7 @@ export function ReportsPanel() {
           entry.checkIn,
           entry.checkOut || "In corso",
           entry.hoursWorked?.toFixed(2) || "0",
+          entry.isAutoClose ? "Chiusura Auto" : entry.isManualEntry ? "Aggiunto Manualmente" : entry.notes || "Normale",
         ].join(","),
       ),
     ].join("\n")
@@ -257,7 +258,7 @@ export function ReportsPanel() {
                     <TableHead>Entrata</TableHead>
                     <TableHead>Uscita</TableHead>
                     <TableHead>Ore Lavorate</TableHead>
-                    <TableHead>Note</TableHead>
+                    <TableHead className="min-w-[120px]">Note</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,9 +270,26 @@ export function ReportsPanel() {
                       <TableCell>{entry.checkOut || "In corso"}</TableCell>
                       <TableCell>{entry.hoursWorked?.toFixed(2) || "0.00"}</TableCell>
                       <TableCell>
-                        {(entry as any).autoClose && (
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Chiusura Auto</span>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {entry.isAutoClose && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full whitespace-nowrap">
+                              Chiusura Auto
+                            </span>
+                          )}
+                          {entry.isManualEntry && (
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full whitespace-nowrap">
+                              Aggiunto Manualmente
+                            </span>
+                          )}
+                          {entry.notes && (
+                            <span className="text-xs text-gray-600 italic block mt-1">{entry.notes}</span>
+                          )}
+                          {!entry.isAutoClose && !entry.isManualEntry && !entry.notes && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full whitespace-nowrap">
+                              Normale
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

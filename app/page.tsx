@@ -9,6 +9,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Clock, Users, Settings } from "lucide-react"
 import { AdminPanel } from "@/components/admin-panel"
+import { AnimatedClockWeather } from "@/components/animated-clock-weather"
 
 export default function HomePage() {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -99,7 +100,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                 <Clock className="h-6 w-6 text-white" />
@@ -108,6 +109,10 @@ export default function HomePage() {
                 <h1 className="text-xl font-semibold text-gray-900">VMH Tracker</h1>
                 <p className="text-sm text-gray-500">Sistema di Gestione Presenze</p>
               </div>
+            </div>
+
+            <div className="flex-1 flex justify-center">
+              <AnimatedClockWeather />
             </div>
 
             <nav className="flex space-x-2">
@@ -216,9 +221,6 @@ export default function HomePage() {
                           </div>
                           <div className="text-center">
                             <p className="font-medium text-gray-900 text-sm">{worker.name}</p>
-                            {worker.hourlyRate && worker.hourlyRate > 0 && (
-                              <p className="text-xs text-gray-500">€{worker.hourlyRate.toFixed(2)}/ora</p>
-                            )}
                             {isActive && <p className="text-xs text-green-600 font-medium">Attivo</p>}
                           </div>
                         </div>
