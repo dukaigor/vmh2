@@ -19,21 +19,23 @@ export class FirebaseService {
   }
 
   // Add new worker
-  static async addWorker(name: string, imageUrl: string): Promise<void> {
+  static async addWorker(name: string, imageUrl: string, hourlyRate?: number): Promise<void> {
     const workersRef = ref(database, "workers")
     const newWorkerRef = push(workersRef)
     await set(newWorkerRef, {
       name,
       imageUrl: imageUrl || "",
+      hourlyRate: hourlyRate || 0,
     })
   }
 
   // Update worker
-  static async updateWorker(workerId: string, name: string, imageUrl: string): Promise<void> {
+  static async updateWorker(workerId: string, name: string, imageUrl: string, hourlyRate?: number): Promise<void> {
     const workerRef = ref(database, `workers/${workerId}`)
     await set(workerRef, {
       name,
       imageUrl: imageUrl || "",
+      hourlyRate: hourlyRate || 0,
     })
   }
 
@@ -43,8 +45,30 @@ export class FirebaseService {
     await remove(workerRef)
   }
 
-  // Check in worker
-  static async checkInWorker(worker: Worker): Promise<void> {
+  // Check if worker already has entry for today
+  static async hasEntryToday(workerId: string): Promise<boolean> {
+    const today = new Date().toISOString().split("T")[0]
+    const entriesRef = ref(database, "timeEntries")
+    const snapshot = await get(entriesRef)
+
+    if (snapshot.exists()) {
+      const entriesData = snapshot.val()
+      const todayEntries = Object.values(entriesData).filter(
+        (entry: any) => entry.workerId === workerId && entry.date === today,
+      )
+      return todayEntries.length > 0
+    }
+    return false
+  }
+
+  // Check in worker (with daily limit check)
+  static async checkInWorker(worker: Worker): Promise<{ success: boolean; message: string }> {
+    // Check if worker already has entry today
+    const hasEntry = await this.hasEntryToday(worker.id)
+    if (hasEntry) {
+      return { success: false, message: "Il lavoratore ha già un'entrata oggi" }
+    }
+
     const now = new Date()
     const dateStr = now.toISOString().split("T")[0]
     const timeStr = now.toLocaleTimeString("it-IT", { hour12: false })
@@ -56,6 +80,8 @@ export class FirebaseService {
       checkIn: timeStr,
       date: dateStr,
     })
+
+    return { success: true, message: "Check-in effettuato con successo" }
   }
 
   // Check out worker
@@ -90,6 +116,91 @@ export class FirebaseService {
     }
   }
 
+  // Add manual time entry
+  static async addManualTimeEntry(
+    workerId: string,
+    workerName: string,
+    date: string,
+    checkIn: string,
+    checkOut: string,
+  ): Promise<{ success: boolean; message: string }> {
+    // Check if worker already has entry for this date
+    const entriesRef = ref(database, "timeEntries")
+    const snapshot = await get(entriesRef)
+
+    if (snapshot.exists()) {
+      const entriesData = snapshot.val()
+      const existingEntry = Object.values(entriesData).find(
+        (entry: any) => entry.workerId === workerId && entry.date === date,
+      )
+      if (existingEntry) {
+        return { success: false, message: "Il lavoratore ha già un'entrata per questa data" }
+      }
+    }
+
+    // Calculate hours worked
+    const checkInTime = new Date(`${date}T${checkIn}`)
+    const checkOutTime = new Date(`${date}T${checkOut}`)
+    const hoursWorked = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
+    if (hoursWorked <= 0) {
+      return { success: false, message: "L'orario di uscita deve essere successivo all'entrata" }
+    }
+
+    const newEntryRef = push(entriesRef)
+    await set(newEntryRef, {
+      workerId,
+      workerName,
+      checkIn,
+      checkOut,
+      date,
+      hoursWorked: Math.round(hoursWorked * 100) / 100,
+      manualEntry: true,
+    })
+
+    return { success: true, message: "Entrata manuale aggiunta con successo" }
+  }
+
+  // Update time entry
+  static async updateTimeEntry(
+    entryId: string,
+    checkIn: string,
+    checkOut: string,
+    date: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const checkInTime = new Date(`${date}T${checkIn}`)
+    const checkOutTime = new Date(`${date}T${checkOut}`)
+    const hoursWorked = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
+
+    if (hoursWorked <= 0) {
+      return { success: false, message: "L'orario di uscita deve essere successivo all'entrata" }
+    }
+
+    const entryRef = ref(database, `timeEntries/${entryId}`)
+    const snapshot = await get(entryRef)
+
+    if (snapshot.exists()) {
+      const existingEntry = snapshot.val()
+      await set(entryRef, {
+        ...existingEntry,
+        checkIn,
+        checkOut,
+        date,
+        hoursWorked: Math.round(hoursWorked * 100) / 100,
+        modified: true,
+      })
+      return { success: true, message: "Entrata modificata con successo" }
+    }
+
+    return { success: false, message: "Entrata non trovata" }
+  }
+
+  // Delete time entry
+  static async deleteTimeEntry(entryId: string): Promise<void> {
+    const entryRef = ref(database, `timeEntries/${entryId}`)
+    await remove(entryRef)
+  }
+
   // Get active sessions
   static async getActiveSessions(): Promise<WorkSession[]> {
     const sessionsRef = ref(database, "activeSessions")
@@ -102,7 +213,7 @@ export class FirebaseService {
     return []
   }
 
-  // Get time entries for reporting
+  // Get time entries for reporting (organized by month)
   static async getTimeEntries(startDate?: string, endDate?: string, workerId?: string): Promise<TimeEntry[]> {
     const entriesRef = ref(database, "timeEntries")
     const snapshot = await get(entriesRef)
@@ -124,9 +235,44 @@ export class FirebaseService {
         entries = entries.filter((entry) => entry.workerId === workerId)
       }
 
-      return entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      // Sort by date (newest first), then by month grouping
+      return entries.sort((a, b) => {
+        const dateA = new Date(a.date)
+        const dateB = new Date(b.date)
+        return dateB.getTime() - dateA.getTime()
+      })
     }
     return []
+  }
+
+  // Get time entries grouped by month
+  static async getTimeEntriesGroupedByMonth(workerId?: string): Promise<{ [key: string]: TimeEntry[] }> {
+    const entries = await this.getTimeEntries(undefined, undefined, workerId)
+    const grouped: { [key: string]: TimeEntry[] } = {}
+
+    entries.forEach((entry) => {
+      const date = new Date(entry.date)
+      const monthKey = `${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`
+
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = []
+      }
+      grouped[monthKey].push(entry)
+    })
+
+    // Sort months (newest first)
+    const sortedGrouped: { [key: string]: TimeEntry[] } = {}
+    Object.keys(grouped)
+      .sort((a, b) => {
+        const [monthA, yearA] = a.split(".").map(Number)
+        const [monthB, yearB] = b.split(".").map(Number)
+        return yearB - yearA || monthB - monthA
+      })
+      .forEach((key) => {
+        sortedGrouped[key] = grouped[key].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      })
+
+    return sortedGrouped
   }
 
   // Get auto-close settings

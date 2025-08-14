@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, Plus, Edit, Lock, Clock, Zap, Calendar, Download, BarChart3 } from "lucide-react"
+import { Trash2, Plus, Edit, Lock, Clock, Zap, Calendar, Download, BarChart3, User, DollarSign } from "lucide-react"
 import { FirebaseService } from "@/lib/firebase-service"
 import type { Worker, TimeEntry } from "@/lib/types"
 
@@ -24,18 +24,29 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
   const [password, setPassword] = useState("")
   const [workers, setWorkers] = useState<Worker[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null)
-  const [newWorker, setNewWorker] = useState({ name: "", imageUrl: "" })
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
+  const [selectedWorkerProfile, setSelectedWorkerProfile] = useState<Worker | null>(null)
+  const [newWorker, setNewWorker] = useState({ name: "", imageUrl: "", hourlyRate: 0 })
+  const [manualEntry, setManualEntry] = useState({
+    workerId: "",
+    workerName: "",
+    date: "",
+    checkIn: "",
+    checkOut: "",
+  })
   const [autoCloseSettings, setAutoCloseSettings] = useState({ time: "18:00", enabled: true })
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
 
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [groupedEntries, setGroupedEntries] = useState<{ [key: string]: TimeEntry[] }>({})
   const [selectedWorker, setSelectedWorker] = useState<string>("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [reportType, setReportType] = useState<"week" | "month" | "year" | "custom">("week")
+  const [reportType, setReportType] = useState<"week" | "month" | "year" | "custom">("month")
   const [reportLoading, setReportLoading] = useState(false)
 
   useEffect(() => {
@@ -113,6 +124,12 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
         selectedWorker === "all" ? undefined : selectedWorker,
       )
       setTimeEntries(entries)
+
+      // Load grouped entries for better organization
+      const grouped = await FirebaseService.getTimeEntriesGroupedByMonth(
+        selectedWorker === "all" ? undefined : selectedWorker,
+      )
+      setGroupedEntries(grouped)
     } catch (error) {
       console.error("Error loading report:", error)
       setError("Errore nel caricamento del rapporto")
@@ -125,26 +142,45 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     return timeEntries.reduce((total, entry) => total + (entry.hoursWorked || 0), 0)
   }
 
+  const getTotalEarnings = () => {
+    return timeEntries.reduce((total, entry) => {
+      const worker = workers.find((w) => w.id === entry.workerId)
+      const hourlyRate = worker?.hourlyRate || 0
+      return total + (entry.hoursWorked || 0) * hourlyRate
+    }, 0)
+  }
+
   const getWorkerHours = (workerId: string) => {
     return timeEntries
       .filter((entry) => entry.workerId === workerId)
       .reduce((total, entry) => total + (entry.hoursWorked || 0), 0)
   }
 
+  const getWorkerEarnings = (workerId: string) => {
+    const worker = workers.find((w) => w.id === workerId)
+    const hourlyRate = worker?.hourlyRate || 0
+    return getWorkerHours(workerId) * hourlyRate
+  }
+
   const exportToCSV = () => {
-    const headers = ["Data", "Lavoratore", "Entrata", "Uscita", "Ore Lavorate", "Note"]
+    const headers = ["Data", "Lavoratore", "Entrata", "Uscita", "Ore Lavorate", "Paga Oraria", "Guadagno", "Note"]
     const csvContent = [
       headers.join(","),
-      ...timeEntries.map((entry) =>
-        [
+      ...timeEntries.map((entry) => {
+        const worker = workers.find((w) => w.id === entry.workerId)
+        const hourlyRate = worker?.hourlyRate || 0
+        const earnings = (entry.hoursWorked || 0) * hourlyRate
+        return [
           entry.date,
           entry.workerName,
           entry.checkIn,
           entry.checkOut || "In corso",
           entry.hoursWorked?.toFixed(2) || "0",
-          (entry as any).autoClose ? "Chiusura Automatica" : "",
-        ].join(","),
-      ),
+          `€${hourlyRate.toFixed(2)}`,
+          `€${earnings.toFixed(2)}`,
+          (entry as any).autoClose ? "Chiusura Automatica" : (entry as any).manualEntry ? "Entrata Manuale" : "",
+        ].join(",")
+      }),
     ].join("\n")
 
     const blob = new Blob([csvContent], { type: "text/csv" })
@@ -156,49 +192,6 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     window.URL.revokeObjectURL(url)
   }
 
-  const handleSaveAutoCloseSettings = async () => {
-    setLoading(true)
-    try {
-      await FirebaseService.updateAutoCloseSettings(autoCloseSettings.time, autoCloseSettings.enabled)
-      setSuccess("Impostazioni salvate con successo")
-      setTimeout(() => setSuccess(""), 3000)
-    } catch (error) {
-      setError("Errore nel salvare le impostazioni")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleRunAutoClose = async () => {
-    setLoading(true)
-    try {
-      const result = await FirebaseService.autoCloseSessions()
-      setSuccess(result.message)
-      onDataChange()
-      setTimeout(() => setSuccess(""), 5000)
-    } catch (error) {
-      setError("Errore nell'eseguire la chiusura automatica")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleForceCloseAll = async () => {
-    if (!confirm("Sei sicuro di voler chiudere tutte le sessioni attive?")) return
-
-    setLoading(true)
-    try {
-      const result = await FirebaseService.forceCloseAllSessions()
-      setSuccess(result.message)
-      onDataChange()
-      setTimeout(() => setSuccess(""), 5000)
-    } catch (error) {
-      setError("Errore nella chiusura forzata")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleAddWorker = async () => {
     if (!newWorker.name.trim()) {
       setError("Il nome è obbligatorio")
@@ -206,12 +199,14 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     }
 
     try {
-      await FirebaseService.addWorker(newWorker.name, newWorker.imageUrl)
-      setNewWorker({ name: "", imageUrl: "" })
+      await FirebaseService.addWorker(newWorker.name, newWorker.imageUrl, newWorker.hourlyRate)
+      setNewWorker({ name: "", imageUrl: "", hourlyRate: 0 })
       setIsAddDialogOpen(false)
       await loadWorkers()
       onDataChange()
       setError("")
+      setSuccess("Lavoratore aggiunto con successo")
+      setTimeout(() => setSuccess(""), 3000)
     } catch (error) {
       setError("Errore nell'aggiungere il lavoratore")
     }
@@ -224,11 +219,18 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     }
 
     try {
-      await FirebaseService.updateWorker(editingWorker.id, editingWorker.name, editingWorker.imageUrl)
+      await FirebaseService.updateWorker(
+        editingWorker.id,
+        editingWorker.name,
+        editingWorker.imageUrl,
+        editingWorker.hourlyRate,
+      )
       setEditingWorker(null)
       await loadWorkers()
       onDataChange()
       setError("")
+      setSuccess("Lavoratore modificato con successo")
+      setTimeout(() => setSuccess(""), 3000)
     } catch (error) {
       setError("Errore nell'aggiornare il lavoratore")
     }
@@ -240,11 +242,84 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
         await FirebaseService.deleteWorker(workerId)
         await loadWorkers()
         onDataChange()
+        setSuccess("Lavoratore eliminato con successo")
+        setTimeout(() => setSuccess(""), 3000)
       } catch (error) {
         setError("Errore nell'eliminare il lavoratore")
       }
     }
   }
+
+  const handleAddManualEntry = async () => {
+    if (!manualEntry.workerId || !manualEntry.date || !manualEntry.checkIn || !manualEntry.checkOut) {
+      setError("Tutti i campi sono obbligatori")
+      return
+    }
+
+    try {
+      const result = await FirebaseService.addManualTimeEntry(
+        manualEntry.workerId,
+        manualEntry.workerName,
+        manualEntry.date,
+        manualEntry.checkIn,
+        manualEntry.checkOut,
+      )
+
+      if (result.success) {
+        setManualEntry({ workerId: "", workerName: "", date: "", checkIn: "", checkOut: "" })
+        setIsManualEntryOpen(false)
+        setSuccess(result.message)
+        setTimeout(() => setSuccess(""), 3000)
+        loadReport() // Refresh the report
+      } else {
+        setError(result.message)
+      }
+    } catch (error) {
+      setError("Errore nell'aggiungere l'entrata manuale")
+    }
+  }
+
+  const handleEditEntry = async () => {
+    if (!editingEntry || !editingEntry.checkIn || !editingEntry.checkOut || !editingEntry.date) {
+      setError("Tutti i campi sono obbligatori")
+      return
+    }
+
+    try {
+      const result = await FirebaseService.updateTimeEntry(
+        editingEntry.id!,
+        editingEntry.checkIn,
+        editingEntry.checkOut,
+        editingEntry.date,
+      )
+
+      if (result.success) {
+        setEditingEntry(null)
+        setSuccess(result.message)
+        setTimeout(() => setSuccess(""), 3000)
+        loadReport() // Refresh the report
+      } else {
+        setError(result.message)
+      }
+    } catch (error) {
+      setError("Errore nella modifica dell'entrata")
+    }
+  }
+
+  const handleDeleteEntry = async (entryId: string) => {
+    if (confirm("Sei sicuro di voler eliminare questa entrata?")) {
+      try {
+        await FirebaseService.deleteTimeEntry(entryId)
+        setSuccess("Entrata eliminata con successo")
+        setTimeout(() => setSuccess(""), 3000)
+        loadReport() // Refresh the report
+      } catch (error) {
+        setError("Errore nell'eliminare l'entrata")
+      }
+    }
+  }
+
+  // ... existing code for auto-close functions ...
 
   if (!isAuthenticated) {
     return (
@@ -295,8 +370,9 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
       )}
 
       <Tabs defaultValue="workers" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="workers">Gestione Lavoratori</TabsTrigger>
+          <TabsTrigger value="entries">Gestione Entrate</TabsTrigger>
           <TabsTrigger value="settings">Impostazioni</TabsTrigger>
           <TabsTrigger value="reports">
             <BarChart3 className="h-4 w-4 mr-2" />
@@ -339,6 +415,20 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                         placeholder="https://..."
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="hourlyRate">Paga Oraria (€)</Label>
+                      <Input
+                        id="hourlyRate"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newWorker.hourlyRate}
+                        onChange={(e) =>
+                          setNewWorker({ ...newWorker, hourlyRate: Number.parseFloat(e.target.value) || 0 })
+                        }
+                        placeholder="0.00"
+                      />
+                    </div>
                     <Button onClick={handleAddWorker} className="w-full">
                       Aggiungi
                     </Button>
@@ -356,9 +446,20 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                         alt={worker.name}
                         className="w-10 h-10 rounded-full object-cover"
                       />
-                      <span className="font-medium">{worker.name}</span>
+                      <div>
+                        <span className="font-medium">{worker.name}</span>
+                        <p className="text-sm text-gray-600">€{(worker.hourlyRate || 0).toFixed(2)}/ora</p>
+                      </div>
                     </div>
                     <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedWorkerProfile(worker)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <User className="h-4 w-4" />
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => setEditingWorker(worker)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -373,6 +474,98 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="entries" className="space-y-6">
+          {/* Manual Entry Management */}
+          <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Gestione Entrate</CardTitle>
+              <Dialog open={isManualEntryOpen} onOpenChange={setIsManualEntryOpen}>
+                <DialogTrigger asChild>
+                  <Button className="flex items-center space-x-2">
+                    <Plus className="h-4 w-4" />
+                    <span>Aggiungi Entrata Manuale</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Aggiungi Entrata Manuale</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="manualWorker">Lavoratore</Label>
+                      <Select
+                        value={manualEntry.workerId}
+                        onValueChange={(value) => {
+                          const worker = workers.find((w) => w.id === value)
+                          setManualEntry({
+                            ...manualEntry,
+                            workerId: value,
+                            workerName: worker?.name || "",
+                          })
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleziona lavoratore" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {workers.map((worker) => (
+                            <SelectItem key={worker.id} value={worker.id}>
+                              {worker.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="manualDate">Data</Label>
+                      <Input
+                        id="manualDate"
+                        type="date"
+                        value={manualEntry.date}
+                        onChange={(e) => setManualEntry({ ...manualEntry, date: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="manualCheckIn">Entrata</Label>
+                        <Input
+                          id="manualCheckIn"
+                          type="time"
+                          value={manualEntry.checkIn}
+                          onChange={(e) => setManualEntry({ ...manualEntry, checkIn: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="manualCheckOut">Uscita</Label>
+                        <Input
+                          id="manualCheckOut"
+                          type="time"
+                          value={manualEntry.checkOut}
+                          onChange={(e) => setManualEntry({ ...manualEntry, checkOut: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <Button onClick={handleAddManualEntry} className="w-full">
+                      Aggiungi Entrata
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg mb-4">
+                <p className="font-medium mb-1">Gestione Entrate:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Ogni lavoratore può avere solo una entrata per giorno</li>
+                  <li>Le entrate manuali vengono contrassegnate nel sistema</li>
+                  <li>È possibile modificare o eliminare qualsiasi entrata esistente</li>
+                  <li>I calcoli delle ore e della paga vengono aggiornati automaticamente</li>
+                </ul>
               </div>
             </CardContent>
           </Card>
@@ -409,14 +602,61 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Button onClick={handleSaveAutoCloseSettings} disabled={loading}>
+                <Button
+                  onClick={async () => {
+                    setLoading(true)
+                    try {
+                      await FirebaseService.updateAutoCloseSettings(autoCloseSettings.time, autoCloseSettings.enabled)
+                      setSuccess("Impostazioni salvate con successo")
+                      setTimeout(() => setSuccess(""), 3000)
+                    } catch (error) {
+                      setError("Errore nel salvare le impostazioni")
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  disabled={loading}
+                >
                   {loading ? "Salvando..." : "Salva Impostazioni"}
                 </Button>
-                <Button variant="outline" onClick={handleRunAutoClose} disabled={loading}>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setLoading(true)
+                    try {
+                      const result = await FirebaseService.autoCloseSessions()
+                      setSuccess(result.message)
+                      onDataChange()
+                      setTimeout(() => setSuccess(""), 5000)
+                    } catch (error) {
+                      setError("Errore nell'eseguire la chiusura automatica")
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  disabled={loading}
+                >
                   <Zap className="h-4 w-4 mr-2" />
                   Esegui Chiusura Automatica
                 </Button>
-                <Button variant="destructive" onClick={handleForceCloseAll} disabled={loading}>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!confirm("Sei sicuro di voler chiudere tutte le sessioni attive?")) return
+                    setLoading(true)
+                    try {
+                      const result = await FirebaseService.forceCloseAllSessions()
+                      setSuccess(result.message)
+                      onDataChange()
+                      setTimeout(() => setSuccess(""), 5000)
+                    } catch (error) {
+                      setError("Errore nella chiusura forzata")
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  disabled={loading}
+                >
                   Chiudi Tutte le Sessioni
                 </Button>
               </div>
@@ -516,7 +756,7 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
 
           {/* Summary Cards */}
           {timeEntries.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="bg-white/60 backdrop-blur-sm border-blue-200/50">
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3">
@@ -532,12 +772,10 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
               <Card className="bg-white/60 backdrop-blur-sm border-green-200/50">
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3">
-                    <Calendar className="h-8 w-8 text-green-500" />
+                    <DollarSign className="h-8 w-8 text-green-500" />
                     <div>
-                      <p className="text-sm text-gray-600">Giorni Lavorativi</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {new Set(timeEntries.map((entry) => entry.date)).size}
-                      </p>
+                      <p className="text-sm text-gray-600">Guadagno Totale</p>
+                      <p className="text-2xl font-bold text-green-600">€{getTotalEarnings().toFixed(2)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -546,12 +784,26 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
               <Card className="bg-white/60 backdrop-blur-sm border-purple-200/50">
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3">
-                    <div className="h-8 w-8 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                    <Calendar className="h-8 w-8 text-purple-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">Giorni Lavorativi</p>
+                      <p className="text-2xl font-bold text-purple-600">
+                        {new Set(timeEntries.map((entry) => entry.date)).size}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/60 backdrop-blur-sm border-orange-200/50">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-8 w-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">
                       {timeEntries.length}
                     </div>
                     <div>
                       <p className="text-sm text-gray-600">Presenze Totali</p>
-                      <p className="text-2xl font-bold text-purple-600">{timeEntries.length}</p>
+                      <p className="text-2xl font-bold text-orange-600">{timeEntries.length}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -559,52 +811,68 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
             </div>
           )}
 
-          {/* Detailed Report Table */}
-          {timeEntries.length > 0 && (
-            <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-              <CardHeader>
-                <CardTitle>Dettaglio Presenze</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Lavoratore</TableHead>
-                        <TableHead>Entrata</TableHead>
-                        <TableHead>Uscita</TableHead>
-                        <TableHead>Ore Lavorate</TableHead>
-                        <TableHead>Note</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {timeEntries.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell>{new Date(entry.date).toLocaleDateString("it-IT")}</TableCell>
-                          <TableCell className="font-medium">{entry.workerName}</TableCell>
-                          <TableCell>{entry.checkIn}</TableCell>
-                          <TableCell>{entry.checkOut || "In corso"}</TableCell>
-                          <TableCell>{entry.hoursWorked?.toFixed(2) || "0.00"}</TableCell>
-                          <TableCell>
-                            {(entry as any).autoClose && (
-                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                Chiusura Auto
-                              </span>
-                            )}
-                            {(entry as any).manualClose && (
-                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                                Chiusura Manuale
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Monthly Grouped Entries */}
+          {Object.keys(groupedEntries).length > 0 && (
+            <div className="space-y-4">
+              {Object.entries(groupedEntries).map(([month, entries]) => (
+                <Card key={month} className="bg-white/60 backdrop-blur-sm border-gray-200/50">
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      {month} - {entries.length} presenze -{" "}
+                      {entries.reduce((sum, entry) => sum + (entry.hoursWorked || 0), 0).toFixed(1)} ore
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Lavoratore</TableHead>
+                            <TableHead>Entrata</TableHead>
+                            <TableHead>Uscita</TableHead>
+                            <TableHead>Ore</TableHead>
+                            <TableHead>Guadagno</TableHead>
+                            <TableHead>Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {entries.map((entry) => {
+                            const worker = workers.find((w) => w.id === entry.workerId)
+                            const earnings = (entry.hoursWorked || 0) * (worker?.hourlyRate || 0)
+                            return (
+                              <TableRow key={entry.id}>
+                                <TableCell>{new Date(entry.date).toLocaleDateString("it-IT")}</TableCell>
+                                <TableCell className="font-medium">{entry.workerName}</TableCell>
+                                <TableCell>{entry.checkIn}</TableCell>
+                                <TableCell>{entry.checkOut || "In corso"}</TableCell>
+                                <TableCell>{entry.hoursWorked?.toFixed(2) || "0.00"}</TableCell>
+                                <TableCell>€{earnings.toFixed(2)}</TableCell>
+                                <TableCell>
+                                  <div className="flex space-x-2">
+                                    <Button variant="outline" size="sm" onClick={() => setEditingEntry(entry)}>
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDeleteEntry(entry.id!)}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
 
           {/* Worker Summary */}
@@ -617,6 +885,7 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                 <div className="space-y-3">
                   {workers.map((worker) => {
                     const hours = getWorkerHours(worker.id)
+                    const earnings = getWorkerEarnings(worker.id)
                     const entries = timeEntries.filter((entry) => entry.workerId === worker.id).length
                     if (hours === 0) return null
 
@@ -628,11 +897,15 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                             alt={worker.name}
                             className="w-10 h-10 rounded-full object-cover"
                           />
-                          <span className="font-medium">{worker.name}</span>
+                          <div>
+                            <span className="font-medium">{worker.name}</span>
+                            <p className="text-sm text-gray-600">€{(worker.hourlyRate || 0).toFixed(2)}/ora</p>
+                          </div>
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">{hours.toFixed(1)} ore</p>
-                          <p className="text-sm text-gray-600">{entries} presenze</p>
+                          <p className="text-sm text-green-600 font-medium">€{earnings.toFixed(2)}</p>
+                          <p className="text-xs text-gray-500">{entries} presenze</p>
                         </div>
                       </div>
                     )
@@ -679,8 +952,125 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                   onChange={(e) => setEditingWorker({ ...editingWorker, imageUrl: e.target.value })}
                 />
               </div>
+              <div>
+                <Label htmlFor="editHourlyRate">Paga Oraria (€)</Label>
+                <Input
+                  id="editHourlyRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editingWorker.hourlyRate || 0}
+                  onChange={(e) =>
+                    setEditingWorker({ ...editingWorker, hourlyRate: Number.parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
               <Button onClick={handleEditWorker} className="w-full">
                 Salva Modifiche
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Entry Dialog */}
+      <Dialog open={!!editingEntry} onOpenChange={() => setEditingEntry(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifica Entrata</DialogTitle>
+          </DialogHeader>
+          {editingEntry && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="editEntryDate">Data</Label>
+                <Input
+                  id="editEntryDate"
+                  type="date"
+                  value={editingEntry.date}
+                  onChange={(e) => setEditingEntry({ ...editingEntry, date: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editCheckIn">Entrata</Label>
+                  <Input
+                    id="editCheckIn"
+                    type="time"
+                    value={editingEntry.checkIn}
+                    onChange={(e) => setEditingEntry({ ...editingEntry, checkIn: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editCheckOut">Uscita</Label>
+                  <Input
+                    id="editCheckOut"
+                    type="time"
+                    value={editingEntry.checkOut || ""}
+                    onChange={(e) => setEditingEntry({ ...editingEntry, checkOut: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button onClick={handleEditEntry} className="w-full">
+                Salva Modifiche
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Worker Profile Dialog */}
+      <Dialog open={!!selectedWorkerProfile} onOpenChange={() => setSelectedWorkerProfile(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-3">
+              <img
+                src={selectedWorkerProfile?.imageUrl || "/placeholder.svg"}
+                alt={selectedWorkerProfile?.name}
+                className="w-12 h-12 rounded-full object-cover"
+              />
+              <div>
+                <span>Profilo di {selectedWorkerProfile?.name}</span>
+                <p className="text-sm text-gray-600 font-normal">
+                  €{(selectedWorkerProfile?.hourlyRate || 0).toFixed(2)}/ora
+                </p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          {selectedWorkerProfile && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <Clock className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-blue-600">
+                        {getWorkerHours(selectedWorkerProfile.id).toFixed(1)}
+                      </p>
+                      <p className="text-sm text-gray-600">Ore Totali</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <DollarSign className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-green-600">
+                        €{getWorkerEarnings(selectedWorkerProfile.id).toFixed(2)}
+                      </p>
+                      <p className="text-sm text-gray-600">Guadagno Totale</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <Button
+                onClick={() => {
+                  setSelectedWorker(selectedWorkerProfile.id)
+                  setSelectedWorkerProfile(null)
+                  loadReport()
+                }}
+                className="w-full"
+              >
+                Visualizza Rapporto Dettagliato
               </Button>
             </div>
           )}

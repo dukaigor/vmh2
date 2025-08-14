@@ -2,10 +2,11 @@ export interface Worker {
   id: string
   name: string
   imageUrl: string
+  hourlyRate?: number // Added hourlyRate field for worker pay calculation
 }
 
 export interface TimeEntry {
-  id: string
+  id?: string // Made id optional for new entries
   workerId: string
   workerName: string
   checkIn: string
