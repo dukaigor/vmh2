@@ -243,9 +243,25 @@ export class FirebaseService {
         ...entriesData[key],
       }))
 
-      // Filter by date range
       if (startDate && endDate) {
-        entries = entries.filter((entry) => entry.date >= startDate && entry.date <= endDate)
+        // Normalize dates to ensure consistent format (YYYY-MM-DD)
+        const normalizeDate = (dateStr: string): string => {
+          const date = new Date(dateStr)
+          return date.toISOString().split("T")[0]
+        }
+
+        const normalizedStartDate = normalizeDate(startDate)
+        const normalizedEndDate = normalizeDate(endDate)
+
+        entries = entries.filter((entry) => {
+          if (!entry.date) return false
+
+          // Normalize entry date as well
+          const normalizedEntryDate = normalizeDate(entry.date)
+
+          // Use proper date comparison
+          return normalizedEntryDate >= normalizedStartDate && normalizedEntryDate <= normalizedEndDate
+        })
       }
 
       // Filter by worker

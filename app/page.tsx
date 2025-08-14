@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Clock, Users, Settings } from "lucide-react"
 import { AdminPanel } from "@/components/admin-panel"
 import { AnimatedClockWeather } from "@/components/animated-clock-weather"
+import { PWAInstallButton } from "@/components/pwa-install-button"
 
 export default function HomePage() {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -239,6 +240,8 @@ export default function HomePage() {
 
         {currentView === "admin" && <AdminPanel onDataChange={loadData} />}
       </main>
+
+      <PWAInstallButton />
     </div>
   )
 }
