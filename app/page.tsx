@@ -204,9 +204,13 @@ export default function HomePage() {
                       >
                         <div className="flex flex-col items-center space-y-4">
                           <div className={`relative ${isActive ? "opacity-60" : ""}`}>
-                            <Avatar className="h-20 w-20 ring-4 ring-white shadow-lg">
-                              <AvatarImage src={worker.imageUrl || "/placeholder.svg"} alt={worker.name} />
-                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-lg">
+                            <Avatar className="h-32 w-32 ring-4 ring-white shadow-lg">
+                              <AvatarImage
+                                src={worker.imageUrl || "/placeholder.svg"}
+                                alt={worker.name}
+                                className="object-cover object-center w-full h-full"
+                              />
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-xl">
                                 {worker.name
                                   .split(" ")
                                   .map((n) => n[0])
