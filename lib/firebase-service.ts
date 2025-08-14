@@ -244,10 +244,17 @@ export class FirebaseService {
       }))
 
       if (startDate && endDate) {
-        // Normalize dates to ensure consistent format (YYYY-MM-DD)
         const normalizeDate = (dateStr: string): string => {
-          const date = new Date(dateStr)
-          return date.toISOString().split("T")[0]
+          if (dateStr.includes("/")) {
+            const parts = dateStr.split("/")
+            if (parts.length === 3) {
+              const day = parts[0].padStart(2, "0")
+              const month = parts[1].padStart(2, "0")
+              const year = parts[2]
+              return `${year}-${month}-${day}`
+            }
+          }
+          return dateStr
         }
 
         const normalizedStartDate = normalizeDate(startDate)
@@ -256,20 +263,16 @@ export class FirebaseService {
         entries = entries.filter((entry) => {
           if (!entry.date) return false
 
-          // Normalize entry date as well
           const normalizedEntryDate = normalizeDate(entry.date)
 
-          // Use proper date comparison
           return normalizedEntryDate >= normalizedStartDate && normalizedEntryDate <= normalizedEndDate
         })
       }
 
-      // Filter by worker
       if (workerId) {
         entries = entries.filter((entry) => entry.workerId === workerId)
       }
 
-      // Sort by date (newest first), then by month grouping
       return entries.sort((a, b) => {
         const dateA = new Date(a.date)
         const dateB = new Date(b.date)
@@ -294,7 +297,6 @@ export class FirebaseService {
       grouped[monthKey].push(entry)
     })
 
-    // Sort months (newest first)
     const sortedGrouped: { [key: string]: TimeEntry[] } = {}
     Object.keys(grouped)
       .sort((a, b) => {
@@ -335,7 +337,6 @@ export class FirebaseService {
       return { closed: 0, message: "Nessuna sessione attiva da chiudere" }
     }
 
-    // Get auto-close settings
     const settings = await this.getAutoCloseSettings()
     const closeTime = customCloseTime || settings.time
 
@@ -355,12 +356,9 @@ export class FirebaseService {
       let shouldClose = false
       let actualCloseTime = closeTime + ":00"
 
-      // Close sessions from previous days at specified time
       if (session.date < today) {
         shouldClose = true
-      }
-      // Close sessions from today if current time is past close time
-      else if (session.date === today && currentTime >= closeTime) {
+      } else if (session.date === today && currentTime >= closeTime) {
         shouldClose = true
         actualCloseTime = currentTime + ":00"
       }
@@ -369,14 +367,12 @@ export class FirebaseService {
         const checkInTime = new Date(`${session.date}T${session.checkIn}`)
         const autoCheckOut = new Date(`${session.date}T${actualCloseTime}`)
 
-        // Ensure checkout is not before checkin
         if (autoCheckOut <= checkInTime) {
           autoCheckOut.setDate(autoCheckOut.getDate() + 1)
         }
 
         const hoursWorked = (autoCheckOut.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
-        // Save to time entries with auto checkout
         const entriesRef = ref(database, "timeEntries")
         const newEntryRef = push(entriesRef)
         await set(newEntryRef, {
@@ -391,7 +387,6 @@ export class FirebaseService {
           notes: `Chiusura automatica alle ${closeTime}`,
         })
 
-        // Remove from active sessions
         const sessionRef = ref(database, `activeSessions/${sessionId}`)
         await set(sessionRef, null)
         closedCount++
@@ -427,14 +422,12 @@ export class FirebaseService {
       const checkInTime = new Date(`${session.date}T${session.checkIn}`)
       const forceCloseTime = new Date(`${session.date}T${actualCloseTime}`)
 
-      // If force close time is before check in, assume next day
       if (forceCloseTime <= checkInTime) {
         forceCloseTime.setDate(forceCloseTime.getDate() + 1)
       }
 
       const hoursWorked = (forceCloseTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)
 
-      // Save to time entries
       const entriesRef = ref(database, "timeEntries")
       const newEntryRef = push(entriesRef)
       await set(newEntryRef, {
@@ -449,7 +442,6 @@ export class FirebaseService {
         notes: "Chiusura forzata dall'admin",
       })
 
-      // Remove from active sessions
       const sessionRef = ref(database, `activeSessions/${sessionId}`)
       await set(sessionRef, null)
       closedCount++

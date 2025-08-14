@@ -19,6 +19,7 @@ export function ReportsPanel() {
   const [endDate, setEndDate] = useState("")
   const [reportType, setReportType] = useState<"week" | "month" | "year" | "custom">("week")
   const [loading, setLoading] = useState(false)
+  const [reportGenerated, setReportGenerated] = useState(false)
 
   useEffect(() => {
     loadWorkers()
@@ -67,6 +68,7 @@ export function ReportsPanel() {
     if (!startDate || !endDate) return
 
     setLoading(true)
+    setReportGenerated(false)
     try {
       const entries = await FirebaseService.getTimeEntries(
         startDate,
@@ -74,6 +76,7 @@ export function ReportsPanel() {
         selectedWorker === "all" ? undefined : selectedWorker,
       )
       setTimeEntries(entries)
+      setReportGenerated(true)
     } catch (error) {
       console.error("Error loading report:", error)
     } finally {
@@ -184,7 +187,7 @@ export function ReportsPanel() {
           </div>
 
           <div className="flex space-x-3">
-            <Button onClick={loadReport} disabled={loading}>
+            <Button onClick={loadReport} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
               {loading ? "Caricamento..." : "Genera Rapporto"}
             </Button>
             {timeEntries.length > 0 && (
@@ -196,6 +199,51 @@ export function ReportsPanel() {
           </div>
         </CardContent>
       </Card>
+
+      {reportGenerated && timeEntries.length === 0 && (
+        <Card className="bg-white/60 backdrop-blur-sm border-orange-200/50">
+          <CardContent className="p-8 text-center">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="h-16 w-16 bg-orange-100 rounded-full flex items-center justify-center">
+                <Calendar className="h-8 w-8 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Nessun Dato Trovato</h3>
+                <p className="text-gray-600 mt-2">
+                  Non sono state trovate presenze per il periodo selezionato
+                  <br />
+                  <span className="font-medium">
+                    {new Date(startDate).toLocaleDateString("it-IT")} - {new Date(endDate).toLocaleDateString("it-IT")}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {timeEntries.length > 0 && (
+        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200/50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Rapporto Generato</h2>
+                <p className="text-gray-600">
+                  Periodo: {new Date(startDate).toLocaleDateString("it-IT")} -{" "}
+                  {new Date(endDate).toLocaleDateString("it-IT")}
+                  {selectedWorker !== "all" && (
+                    <span className="ml-2">• Lavoratore: {workers.find((w) => w.id === selectedWorker)?.name}</span>
+                  )}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-blue-600">{getTotalHours().toFixed(1)} ore</p>
+                <p className="text-sm text-gray-600">{timeEntries.length} presenze</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       {timeEntries.length > 0 && (
