@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Clock, Cloud, Sun, CloudRain, CloudSnow } from "lucide-react"
+import { FirebaseService } from "@/lib/firebase-service"
 
 interface WeatherData {
   temperature: number
@@ -9,10 +10,16 @@ interface WeatherData {
   icon: string
 }
 
+interface AutoCloseSettings {
+  time: string
+  enabled: boolean
+}
+
 export function AnimatedClockWeather() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [autoCloseSettings, setAutoCloseSettings] = useState<AutoCloseSettings>({ time: "18:00", enabled: true })
 
   useEffect(() => {
     // Update time every second
@@ -23,8 +30,20 @@ export function AnimatedClockWeather() {
     // Fetch weather data for Milan
     fetchWeather()
 
+    // Load auto close settings
+    loadAutoCloseSettings()
+
     return () => clearInterval(timeInterval)
   }, [])
+
+  const loadAutoCloseSettings = async () => {
+    try {
+      const settings = await FirebaseService.getAutoCloseSettings()
+      setAutoCloseSettings(settings)
+    } catch (error) {
+      console.error("Error loading auto close settings:", error)
+    }
+  }
 
   const fetchWeather = async () => {
     try {
@@ -88,11 +107,29 @@ export function AnimatedClockWeather() {
   const getDayProgress = () => {
     const now = new Date()
     const milanTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Rome" }))
+
+    // Start of day (00:00)
     const startOfDay = new Date(milanTime.getFullYear(), milanTime.getMonth(), milanTime.getDate())
-    const endOfDay = new Date(milanTime.getFullYear(), milanTime.getMonth(), milanTime.getDate() + 1)
+
+    // End of day based on auto close time
+    const [closeHour, closeMinute] = autoCloseSettings.time.split(":").map(Number)
+    const endOfDay = new Date(
+      milanTime.getFullYear(),
+      milanTime.getMonth(),
+      milanTime.getDate(),
+      closeHour,
+      closeMinute,
+    )
+
+    // If current time is past closing time, show 100%
+    if (milanTime >= endOfDay) {
+      return 100
+    }
+
     const totalMinutes = (endOfDay.getTime() - startOfDay.getTime()) / (1000 * 60)
     const elapsedMinutes = (milanTime.getTime() - startOfDay.getTime()) / (1000 * 60)
-    return (elapsedMinutes / totalMinutes) * 100
+
+    return Math.max(0, Math.min(100, (elapsedMinutes / totalMinutes) * 100))
   }
 
   const formatTime = (date: Date) => {
@@ -139,7 +176,9 @@ export function AnimatedClockWeather() {
             style={{ width: `${dayProgress}%` }}
           ></div>
         </div>
-        <div className="text-xs text-gray-500 font-bold">{dayProgress.toFixed(1)}% completato</div>
+        <div className="text-xs text-gray-500 font-bold">
+          {dayProgress.toFixed(1)}% completato (fino alle {autoCloseSettings.time})
+        </div>
       </div>
 
       {/* Weather Section */}
