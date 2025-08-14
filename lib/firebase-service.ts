@@ -171,7 +171,7 @@ export class FirebaseService {
       checkIn,
       checkOut,
       date,
-      hoursWorked: Math.round(hoursWorked * 100) / 100,
+      hoursWorked: Math.max(0, Math.round(hoursWorked * 100) / 100),
       isAutoClose: false,
       isManualEntry: true,
     })
@@ -345,11 +345,21 @@ export class FirebaseService {
     }
 
     const sessionsData = snapshot.val()
-    const today = this.formatMilanDate(this.getMilanTime())
-    const now = this.getMilanTime()
-    const currentTime = this.formatMilanTime(now).substring(0, 5)
+    const milanNow = this.getMilanTime()
+    const today = this.formatMilanDate(milanNow)
+
+    const currentHour = milanNow.getHours()
+    const currentMinute = milanNow.getMinutes()
+    const currentTimeMinutes = currentHour * 60 + currentMinute
+
+    const [closeHour, closeMinute] = closeTime.split(":").map(Number)
+    const closeTimeMinutes = closeHour * 60 + closeMinute
 
     let closedCount = 0
+
+    console.log(
+      `Auto-close check: Current time ${currentHour}:${currentMinute.toString().padStart(2, "0")} (${currentTimeMinutes} min), Close time ${closeTime} (${closeTimeMinutes} min)`,
+    )
 
     for (const sessionId of Object.keys(sessionsData)) {
       const session = sessionsData[sessionId]
@@ -357,10 +367,16 @@ export class FirebaseService {
       let actualCloseTime = closeTime + ":00"
 
       if (session.date < today) {
+        // Session from previous day - close it
         shouldClose = true
-      } else if (session.date === today && currentTime >= closeTime) {
+        console.log(`Closing session from previous day: ${session.workerName} - ${session.date}`)
+      } else if (session.date === today && currentTimeMinutes >= closeTimeMinutes) {
+        // Session from today and past closing time
         shouldClose = true
-        actualCloseTime = currentTime + ":00"
+        actualCloseTime = this.formatMilanTime(milanNow)
+        console.log(
+          `Closing session from today past closing time: ${session.workerName} - current: ${currentTimeMinutes}, close: ${closeTimeMinutes}`,
+        )
       }
 
       if (shouldClose) {
@@ -390,15 +406,21 @@ export class FirebaseService {
         const sessionRef = ref(database, `activeSessions/${sessionId}`)
         await set(sessionRef, null)
         closedCount++
+
+        console.log(`Session closed: ${session.workerName} - ${session.checkIn} to ${actualCloseTime}`)
       }
     }
 
+    const resultMessage =
+      closedCount > 0
+        ? `${closedCount} sessioni chiuse automaticamente alle ${closeTime}`
+        : `Nessuna sessione da chiudere (ora attuale: ${currentHour}:${currentMinute.toString().padStart(2, "0")}, chiusura: ${closeTime})`
+
+    console.log(`Auto-close result: ${resultMessage}`)
+
     return {
       closed: closedCount,
-      message:
-        closedCount > 0
-          ? `${closedCount} sessioni chiuse automaticamente alle ${closeTime}`
-          : "Nessuna sessione da chiudere",
+      message: resultMessage,
     }
   }
 

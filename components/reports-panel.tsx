@@ -1,15 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calendar, Download, Clock } from "lucide-react"
+import { Calendar, Clock } from "lucide-react"
 import { FirebaseService } from "@/lib/firebase-service"
 import type { Worker, TimeEntry } from "@/lib/types"
+import { ReportFilters } from "./report-filters"
 
 export function ReportsPanel() {
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -23,14 +20,7 @@ export function ReportsPanel() {
 
   useEffect(() => {
     loadWorkers()
-    setDefaultDates()
   }, [])
-
-  useEffect(() => {
-    if (reportType !== "custom") {
-      setDefaultDates()
-    }
-  }, [reportType])
 
   const loadWorkers = async () => {
     try {
@@ -39,29 +29,6 @@ export function ReportsPanel() {
     } catch (error) {
       console.error("Error loading workers:", error)
     }
-  }
-
-  const setDefaultDates = () => {
-    const now = new Date()
-    let start: Date
-    const end = new Date()
-
-    switch (reportType) {
-      case "week":
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay())
-        break
-      case "month":
-        start = new Date(now.getFullYear(), now.getMonth(), 1)
-        break
-      case "year":
-        start = new Date(now.getFullYear(), 0, 1)
-        break
-      default:
-        return
-    }
-
-    setStartDate(start.toISOString().split("T")[0])
-    setEndDate(end.toISOString().split("T")[0])
   }
 
   const loadReport = async () => {
@@ -122,83 +89,21 @@ export function ReportsPanel() {
   return (
     <div className="space-y-6">
       {/* Report Filters */}
-      <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5" />
-            <span>Filtri Rapporto</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="reportType">Periodo</Label>
-              <Select value={reportType} onValueChange={(value: any) => setReportType(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="week">Questa Settimana</SelectItem>
-                  <SelectItem value="month">Questo Mese</SelectItem>
-                  <SelectItem value="year">Quest'Anno</SelectItem>
-                  <SelectItem value="custom">Personalizzato</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="worker">Lavoratore</Label>
-              <Select value={selectedWorker} onValueChange={setSelectedWorker}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i Lavoratori</SelectItem>
-                  {workers.map((worker) => (
-                    <SelectItem key={worker.id} value={worker.id}>
-                      {worker.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="startDate">Data Inizio</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={reportType !== "custom"}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="endDate">Data Fine</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={reportType !== "custom"}
-              />
-            </div>
-          </div>
-
-          <div className="flex space-x-3">
-            <Button onClick={loadReport} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-              {loading ? "Caricamento..." : "Genera Rapporto"}
-            </Button>
-            {timeEntries.length > 0 && (
-              <Button variant="outline" onClick={exportToCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                Esporta CSV
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <ReportFilters
+        reportType={reportType}
+        setReportType={setReportType}
+        selectedWorker={selectedWorker}
+        setSelectedWorker={setSelectedWorker}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        workers={workers}
+        onGenerateReport={loadReport}
+        onExportCSV={exportToCSV}
+        loading={loading}
+        hasData={timeEntries.length > 0}
+      />
 
       {reportGenerated && timeEntries.length === 0 && (
         <Card className="bg-white/60 backdrop-blur-sm border-orange-200/50">

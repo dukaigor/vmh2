@@ -9,11 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, Plus, Edit, Lock, Clock, Zap, Calendar, Download, BarChart3, User, DollarSign } from "lucide-react"
+import { Trash2, Plus, Edit, Lock, Clock, Zap, User, DollarSign, TrendingUp } from "lucide-react"
 import { FirebaseService } from "@/lib/firebase-service"
 import type { Worker, TimeEntry } from "@/lib/types"
+import { ReportsPro } from "@/components/reports-pro"
 
 interface AdminPanelProps {
   onDataChange: () => void
@@ -396,9 +396,9 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
           <TabsTrigger value="workers">Gestione Lavoratori</TabsTrigger>
           <TabsTrigger value="entries">Gestione Entrate</TabsTrigger>
           <TabsTrigger value="settings">Impostazioni</TabsTrigger>
-          <TabsTrigger value="reports">
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Rapporti
+          <TabsTrigger value="reports-pro">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            RAPORT PRO
           </TabsTrigger>
         </TabsList>
 
@@ -663,257 +663,8 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="reports" className="space-y-6">
-          {/* Report Filters */}
-          <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Calendar className="h-5 w-5" />
-                <span>Filtri Rapporto</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label htmlFor="reportType">Periodo</Label>
-                  <Select value={reportType} onValueChange={(value: any) => setReportType(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="week">Questa Settimana</SelectItem>
-                      <SelectItem value="month">Questo Mese</SelectItem>
-                      <SelectItem value="year">Quest'Anno</SelectItem>
-                      <SelectItem value="custom">Personalizzato</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="worker">Lavoratore</Label>
-                  <Select value={selectedWorker} onValueChange={setSelectedWorker}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutti i Lavoratori</SelectItem>
-                      {workers.map((worker) => (
-                        <SelectItem key={worker.id} value={worker.id}>
-                          {worker.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="startDate">Data Inizio</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    disabled={reportType !== "custom"}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="endDate">Data Fine</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    disabled={reportType !== "custom"}
-                  />
-                </div>
-              </div>
-
-              <div className="flex space-x-3">
-                <Button onClick={loadReport} disabled={reportLoading}>
-                  {reportLoading ? "Caricamento..." : "Genera Rapporto"}
-                </Button>
-                {timeEntries.length > 0 && (
-                  <Button variant="outline" onClick={exportToCSV}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Esporta CSV
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Summary Cards */}
-          {timeEntries.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="bg-white/60 backdrop-blur-sm border-blue-200/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="h-8 w-8 text-blue-500" />
-                    <div>
-                      <p className="text-sm text-gray-600">Ore Totali</p>
-                      <p className="text-2xl font-bold text-blue-600">{getTotalHours().toFixed(1)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-green-200/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <DollarSign className="h-8 w-8 text-green-500" />
-                    <div>
-                      <p className="text-sm text-gray-600">Guadagno Totale</p>
-                      <p className="text-2xl font-bold text-green-600">€{getTotalEarnings().toFixed(2)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-purple-200/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="h-8 w-8 text-purple-500" />
-                    <div>
-                      <p className="text-sm text-gray-600">Giorni Lavorativi</p>
-                      <p className="text-2xl font-bold text-purple-600">
-                        {new Set(timeEntries.map((entry) => entry.date)).size}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-orange-200/50">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="h-8 w-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">
-                      {timeEntries.length}
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Presenze Totali</p>
-                      <p className="text-2xl font-bold text-orange-600">{timeEntries.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Monthly Grouped Entries */}
-          {Object.keys(groupedEntries).length > 0 && (
-            <div className="space-y-4">
-              {Object.entries(groupedEntries).map(([month, entries]) => (
-                <Card key={month} className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-                  <CardHeader>
-                    <CardTitle className="text-lg">
-                      {month} - {entries.length} presenze -{" "}
-                      {entries.reduce((sum, entry) => sum + (entry.hoursWorked || 0), 0).toFixed(1)} ore
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Data</TableHead>
-                            <TableHead>Lavoratore</TableHead>
-                            <TableHead>Entrata</TableHead>
-                            <TableHead>Uscita</TableHead>
-                            <TableHead>Ore</TableHead>
-                            <TableHead>Guadagno</TableHead>
-                            <TableHead>Azioni</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {entries.map((entry) => {
-                            const worker = workers.find((w) => w.id === entry.workerId)
-                            const earnings = (entry.hoursWorked || 0) * (worker?.hourlyRate || 0)
-                            return (
-                              <TableRow key={entry.id}>
-                                <TableCell>{new Date(entry.date).toLocaleDateString("it-IT")}</TableCell>
-                                <TableCell className="font-medium">{entry.workerName}</TableCell>
-                                <TableCell>{entry.checkIn}</TableCell>
-                                <TableCell>{entry.checkOut || "In corso"}</TableCell>
-                                <TableCell>{entry.hoursWorked?.toFixed(2) || "0.00"}</TableCell>
-                                <TableCell>€{earnings.toFixed(2)}</TableCell>
-                                <TableCell>
-                                  <div className="flex space-x-2">
-                                    <Button variant="outline" size="sm" onClick={() => setEditingEntry(entry)}>
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleDeleteEntry(entry.id!)}
-                                      className="text-red-600 hover:text-red-700"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {/* Worker Summary */}
-          {selectedWorker === "all" && timeEntries.length > 0 && (
-            <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-              <CardHeader>
-                <CardTitle>Riepilogo per Lavoratore</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {workers.map((worker) => {
-                    const hours = getWorkerHours(worker.id)
-                    const earnings = getWorkerEarnings(worker.id)
-                    const entries = timeEntries.filter((entry) => entry.workerId === worker.id).length
-                    if (hours === 0) return null
-
-                    return (
-                      <div key={worker.id} className="flex items-center justify-between p-3 bg-white/80 rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <img
-                            src={worker.imageUrl || "/placeholder.svg"}
-                            alt={worker.name}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                          <div>
-                            <span className="font-medium">{worker.name}</span>
-                            <p className="text-sm text-gray-600">€{(worker.hourlyRate || 0).toFixed(2)}/ora</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">{hours.toFixed(1)} ore</p>
-                          <p className="text-sm text-green-600 font-medium">€{earnings.toFixed(2)}</p>
-                          <p className="text-xs text-gray-500">{entries} presenze</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* No Data Message */}
-          {timeEntries.length === 0 && !reportLoading && startDate && endDate && (
-            <Card className="bg-white/60 backdrop-blur-sm border-gray-200/50">
-              <CardContent className="p-8 text-center">
-                <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Nessun dato trovato per il periodo selezionato</p>
-                <p className="text-sm text-gray-500 mt-2">Prova a modificare i filtri o il periodo di ricerca</p>
-              </CardContent>
-            </Card>
-          )}
+        <TabsContent value="reports-pro" className="space-y-6">
+          <ReportsPro workers={workers} />
         </TabsContent>
       </Tabs>
 
