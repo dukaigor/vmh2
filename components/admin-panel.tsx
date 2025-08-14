@@ -11,15 +11,31 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trash2, Plus, Edit, Lock, Clock, Zap, Calendar, Download, BarChart3, User, DollarSign } from "lucide-react"
+import {
+  Trash2,
+  Plus,
+  Edit,
+  Lock,
+  Clock,
+  Zap,
+  Calendar,
+  Download,
+  BarChart3,
+  User,
+  DollarSign,
+  Upload,
+} from "lucide-react"
 import { FirebaseService } from "@/lib/firebase-service"
 import type { Worker, TimeEntry } from "@/lib/types"
+import { ImageUploadCrop } from "./image-upload-crop"
 
 interface AdminPanelProps {
+  isOpen: boolean
+  onClose: () => void
   onDataChange: () => void
 }
 
-export function AdminPanel({ onDataChange }: AdminPanelProps) {
+export function AdminPanel({ isOpen, onClose, onDataChange }: AdminPanelProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [password, setPassword] = useState("")
   const [workers, setWorkers] = useState<Worker[]>([])
@@ -40,6 +56,8 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
+  const [imageUploadOpen, setImageUploadOpen] = useState(false)
+  const [imageUploadWorker, setImageUploadWorker] = useState<Worker | null>(null)
 
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
   const [groupedEntries, setGroupedEntries] = useState<{ [key: string]: TimeEntry[] }>({})
@@ -319,7 +337,25 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     }
   }
 
-  // ... existing code for auto-close functions ...
+  const handleImageSave = async (imageUrl: string) => {
+    if (!imageUploadWorker) return
+
+    try {
+      const updatedWorker = { ...imageUploadWorker, imageUrl }
+      await FirebaseService.updateWorker(updatedWorker)
+      setWorkers((prev) => prev.map((w) => (w.id === updatedWorker.id ? updatedWorker : w)))
+      setImageUploadOpen(false)
+      setImageUploadWorker(null)
+    } catch (error) {
+      console.error("Error updating worker image:", error)
+      alert("Errore nell'aggiornare la foto")
+    }
+  }
+
+  const openImageUpload = (worker: Worker) => {
+    setImageUploadWorker(worker)
+    setImageUploadOpen(true)
+  }
 
   if (!isAuthenticated) {
     return (
@@ -407,13 +443,28 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="workerImage">URL Immagine</Label>
-                      <Input
-                        id="workerImage"
-                        value={newWorker.imageUrl}
-                        onChange={(e) => setNewWorker({ ...newWorker, imageUrl: e.target.value })}
-                        placeholder="https://..."
-                      />
+                      <Label>Foto Lavoratore</Label>
+                      <div className="flex items-center gap-4">
+                        {newWorker.imageUrl && (
+                          <img
+                            src={newWorker.imageUrl || "/placeholder.svg"}
+                            alt="Preview"
+                            className="w-16 h-16 rounded-full object-cover"
+                          />
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setImageUploadWorker({ ...newWorker, id: "new" } as Worker)
+                            setImageUploadOpen(true)
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          <Upload className="w-4 h-4" />
+                          {newWorker.imageUrl ? "Cambia Foto" : "Carica Foto"}
+                        </Button>
+                      </div>
                     </div>
                     <div>
                       <Label htmlFor="hourlyRate">Paga Oraria (€)</Label>
@@ -441,11 +492,21 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                 {workers.map((worker) => (
                   <div key={worker.id} className="flex items-center justify-between p-3 bg-white/80 rounded-lg border">
                     <div className="flex items-center space-x-3">
-                      <img
-                        src={worker.imageUrl || "/placeholder.svg"}
-                        alt={worker.name}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
+                      <div className="relative">
+                        <img
+                          src={worker.imageUrl || "/placeholder.svg"}
+                          alt={worker.name}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="absolute -bottom-1 -right-1 w-6 h-6 p-0 rounded-full bg-white border-2"
+                          onClick={() => openImageUpload(worker)}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <div>
                         <span className="font-medium">{worker.name}</span>
                         <p className="text-sm text-gray-600">€{(worker.hourlyRate || 0).toFixed(2)}/ora</p>
@@ -945,12 +1006,25 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                 />
               </div>
               <div>
-                <Label htmlFor="editWorkerImage">URL Immagine</Label>
-                <Input
-                  id="editWorkerImage"
-                  value={editingWorker.imageUrl}
-                  onChange={(e) => setEditingWorker({ ...editingWorker, imageUrl: e.target.value })}
-                />
+                <Label>Foto Lavoratore</Label>
+                <div className="flex items-center gap-4">
+                  {editingWorker.imageUrl && (
+                    <img
+                      src={editingWorker.imageUrl || "/placeholder.svg"}
+                      alt="Preview"
+                      className="w-16 h-16 rounded-full object-cover"
+                    />
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => openImageUpload(editingWorker)}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {editingWorker.imageUrl ? "Cambia Foto" : "Carica Foto"}
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label htmlFor="editHourlyRate">Paga Oraria (€)</Label>
@@ -1076,6 +1150,28 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ImageUploadCrop Component */}
+      <ImageUploadCrop
+        currentImageUrl={imageUploadWorker?.imageUrl}
+        onImageSave={(imageUrl) => {
+          if (imageUploadWorker?.id === "new") {
+            setNewWorker((prev) => ({ ...prev, imageUrl }))
+          } else if (editingWorker && imageUploadWorker?.id === editingWorker.id) {
+            setEditingWorker((prev) => (prev ? { ...prev, imageUrl } : null))
+          } else {
+            handleImageSave(imageUrl)
+          }
+          setImageUploadOpen(false)
+          setImageUploadWorker(null)
+        }}
+        isOpen={imageUploadOpen}
+        onClose={() => {
+          setImageUploadOpen(false)
+          setImageUploadWorker(null)
+        }}
+        workerName={imageUploadWorker?.name}
+      />
     </div>
   )
 }
