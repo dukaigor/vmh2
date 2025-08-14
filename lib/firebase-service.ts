@@ -1,5 +1,5 @@
 import { database } from "./firebase"
-import { ref, get, set, push, remove } from "firebase/database"
+import { ref, get, set, push, remove, onValue, off } from "firebase/database"
 import type { Worker, TimeEntry, WorkSession } from "./types"
 
 export class FirebaseService {
@@ -451,5 +451,40 @@ export class FirebaseService {
       closed: closedCount,
       message: `${closedCount} sessioni chiuse manualmente`,
     }
+  }
+
+  static onWorkersChange(callback: (workers: Worker[]) => void): () => void {
+    const workersRef = ref(database, "workers")
+
+    const unsubscribe = onValue(workersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const workersData = snapshot.val()
+        const workers = Object.keys(workersData).map((key) => ({
+          id: key,
+          ...workersData[key],
+        }))
+        callback(workers)
+      } else {
+        callback([])
+      }
+    })
+
+    return () => off(workersRef, "value", unsubscribe)
+  }
+
+  static onActiveSessionsChange(callback: (sessions: WorkSession[]) => void): () => void {
+    const sessionsRef = ref(database, "activeSessions")
+
+    const unsubscribe = onValue(sessionsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const sessionsData = snapshot.val()
+        const sessions = Object.values(sessionsData) as WorkSession[]
+        callback(sessions)
+      } else {
+        callback([])
+      }
+    })
+
+    return () => off(sessionsRef, "value", unsubscribe)
   }
 }

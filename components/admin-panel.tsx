@@ -77,7 +77,7 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
       const workersData = await FirebaseService.getWorkers()
       setWorkers(workersData)
     } catch (error) {
-      console.error("Error loading workers:", error)
+      setError("Errore nel caricamento dei lavoratori")
     }
   }
 
@@ -203,7 +203,6 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
       setNewWorker({ name: "", imageUrl: "", hourlyRate: 0 })
       setIsAddDialogOpen(false)
       await loadWorkers()
-      onDataChange()
       setError("")
       setSuccess("Lavoratore aggiunto con successo")
       setTimeout(() => setSuccess(""), 3000)
@@ -227,7 +226,6 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
       )
       setEditingWorker(null)
       await loadWorkers()
-      onDataChange()
       setError("")
       setSuccess("Lavoratore modificato con successo")
       setTimeout(() => setSuccess(""), 3000)
@@ -241,7 +239,6 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
       try {
         await FirebaseService.deleteWorker(workerId)
         await loadWorkers()
-        onDataChange()
         setSuccess("Lavoratore eliminato con successo")
         setTimeout(() => setSuccess(""), 3000)
       } catch (error) {
@@ -319,7 +316,32 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
     }
   }
 
-  // ... existing code for auto-close functions ...
+  const handleAutoClose = async () => {
+    setLoading(true)
+    try {
+      const result = await FirebaseService.autoCloseSessions()
+      setSuccess(result.message)
+      setTimeout(() => setSuccess(""), 5000)
+    } catch (error) {
+      setError("Errore nell'eseguire la chiusura automatica")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForceCloseAll = async () => {
+    if (!confirm("Sei sicuro di voler chiudere tutte le sessioni attive?")) return
+    setLoading(true)
+    try {
+      const result = await FirebaseService.forceCloseAllSessions()
+      setSuccess(result.message)
+      setTimeout(() => setSuccess(""), 5000)
+    } catch (error) {
+      setError("Errore nella chiusura forzata")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (!isAuthenticated) {
     return (
@@ -619,44 +641,11 @@ export function AdminPanel({ onDataChange }: AdminPanelProps) {
                 >
                   {loading ? "Salvando..." : "Salva Impostazioni"}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    setLoading(true)
-                    try {
-                      const result = await FirebaseService.autoCloseSessions()
-                      setSuccess(result.message)
-                      onDataChange()
-                      setTimeout(() => setSuccess(""), 5000)
-                    } catch (error) {
-                      setError("Errore nell'eseguire la chiusura automatica")
-                    } finally {
-                      setLoading(false)
-                    }
-                  }}
-                  disabled={loading}
-                >
+                <Button variant="outline" onClick={handleAutoClose} disabled={loading}>
                   <Zap className="h-4 w-4 mr-2" />
                   Esegui Chiusura Automatica
                 </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    if (!confirm("Sei sicuro di voler chiudere tutte le sessioni attive?")) return
-                    setLoading(true)
-                    try {
-                      const result = await FirebaseService.forceCloseAllSessions()
-                      setSuccess(result.message)
-                      onDataChange()
-                      setTimeout(() => setSuccess(""), 5000)
-                    } catch (error) {
-                      setError("Errore nella chiusura forzata")
-                    } finally {
-                      setLoading(false)
-                    }
-                  }}
-                  disabled={loading}
-                >
+                <Button variant="destructive" onClick={handleForceCloseAll} disabled={loading}>
                   Chiudi Tutte le Sessioni
                 </Button>
               </div>

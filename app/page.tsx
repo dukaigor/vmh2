@@ -20,28 +20,25 @@ export default function HomePage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   useEffect(() => {
-    loadData()
+    const unsubscribeWorkers = FirebaseService.onWorkersChange((workersData) => {
+      setWorkers(workersData)
+      setLoading(false)
+    })
+
+    const unsubscribeSessions = FirebaseService.onActiveSessionsChange((sessionsData) => {
+      setActiveSessions(sessionsData)
+    })
+
     runAutoClose()
 
-    // Set up periodic auto-close check every 5 minutes
     const interval = setInterval(runAutoClose, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
 
-  const loadData = async () => {
-    try {
-      const [workersData, sessionsData] = await Promise.all([
-        FirebaseService.getWorkers(),
-        FirebaseService.getActiveSessions(),
-      ])
-      setWorkers(workersData)
-      setActiveSessions(sessionsData)
-    } catch (error) {
-      console.error("Error loading data:", error)
-    } finally {
-      setLoading(false)
+    return () => {
+      unsubscribeWorkers()
+      unsubscribeSessions()
+      clearInterval(interval)
     }
-  }
+  }, [])
 
   const runAutoClose = async () => {
     try {
@@ -56,7 +53,6 @@ export default function HomePage() {
       const result = await FirebaseService.checkInWorker(worker)
       if (result.success) {
         setMessage({ type: "success", text: result.message })
-        await loadData()
       } else {
         setMessage({ type: "error", text: result.message })
       }
@@ -72,7 +68,6 @@ export default function HomePage() {
     try {
       await FirebaseService.checkOutWorker(workerId)
       setMessage({ type: "success", text: "Check-out effettuato con successo" })
-      await loadData()
       setTimeout(() => setMessage(null), 3000)
     } catch (error) {
       console.error("Error checking out:", error)
@@ -238,7 +233,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {currentView === "admin" && <AdminPanel onDataChange={loadData} />}
+        {currentView === "admin" && <AdminPanel onDataChange={() => {}} />}
       </main>
 
       <PWAInstallButton />
